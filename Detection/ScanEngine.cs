@@ -19,6 +19,7 @@ public sealed class ScanEngine
         _detectors = (detectors ?? new IWalletDetector[]
         {
             new BrowserExtensionDetector(),
+            new FirefoxExtensionDetector(),
             new DesktopAppDetector(),
         }).ToList();
     }
