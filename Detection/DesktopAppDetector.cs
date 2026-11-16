@@ -130,11 +130,26 @@ public sealed class DesktopAppDetector : IWalletDetector
 
     private static string? MatchWallet(string candidate)
     {
-        // Exact-ish match first, then contains, so "Exodus 24.1.1" still resolves.
-        if (WalletCatalog.Desktop.TryGetValue(candidate.Trim(), out var exact)) return exact;
+        var trimmed = candidate.Trim();
+
+        // Exact name wins outright.
+        if (WalletCatalog.Desktop.TryGetValue(trimmed, out var exact)) return exact;
+
+        // Otherwise the name must be followed by a version, which is how installers name
+        // folders ("Exodus 24.1.1", "Ledger Live v2.5"). Simply starting with the name is
+        // not enough: "Sparrow Docs", "Bitcoin Core Tools" and "Atomic Wedgie Player" are
+        // all real folders that are not wallets.
         foreach (var (needle, wallet) in WalletCatalog.Desktop)
-            if (candidate.Contains(needle, StringComparison.OrdinalIgnoreCase))
-                return wallet;
+        {
+            if (!trimmed.StartsWith(needle, StringComparison.OrdinalIgnoreCase)) continue;
+            if (trimmed.Length == needle.Length) return wallet;
+
+            // Optional separator, then the version must start with a digit.
+            var i = needle.Length;
+            if (trimmed[i] is ' ' or '-' or '_' or '.' or 'v' or 'V') i++;
+            if (i < trimmed.Length && char.IsDigit(trimmed[i])) return wallet;
+        }
+
         return null;
     }
 }

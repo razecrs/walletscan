@@ -31,6 +31,34 @@ public sealed class BrowserExtensionDetector : IWalletDetector
 
     private static readonly string[] SubTrees = { "Extensions", "Local Extension Settings", "Sync Extension Settings" };
 
+    /// <summary>
+    /// A user-data root can outlive the browser itself: uninstalling leaves the folders
+    /// behind. Chromium writes Local State or Preferences on every real run, so requiring
+    /// one keeps stale directories from being reported as an installed browser.
+    /// </summary>
+    private static bool LooksLive(string root)
+    {
+        try
+        {
+            return File.Exists(Path.Combine(root, "Local State"))
+                || File.Exists(Path.Combine(root, "Preferences"))
+                || Directory.Exists(Path.Combine(root, "Default", "Preferences"));
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException) { return false; }
+    }
+
+    /// <summary>
+    /// Chrome writes Preferences into a profile on every run, so it is a useful signal of a
+    /// used profile. It is not authoritative though: a profile can hold live extensions and
+    /// still lack it. Profiles are therefore ranked, not filtered, and a hit from a profile
+    /// with no Preferences is kept but labelled as such by the caller.
+    /// </summary>
+    private static bool IsLiveProfile(string profileDir)
+    {
+        try { return File.Exists(Path.Combine(profileDir, "Preferences")); }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException) { return false; }
+    }
+
     public IEnumerable<WalletHit> Detect(CancellationToken ct = default)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -39,6 +67,7 @@ public sealed class BrowserExtensionDetector : IWalletDetector
         {
             ct.ThrowIfCancellationRequested();
             if (!Directory.Exists(root)) continue;
+            if (!LooksLive(root)) continue;
 
             IEnumerable<string> profiles;
             try
